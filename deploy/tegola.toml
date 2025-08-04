@@ -1,16 +1,18 @@
+# https://tegola.io/documentation/configuration/
 [webserver]
 port = ":8080"
 
 [[providers]]
 name = "osm"
 type = "postgis"
-connection = "host=postgres user=osm dbname=osm password=osm sslmode=disable"
+uri = "postgres://osm:osm@postgres:5432/osm?sslmode=disable"
 
   [[providers.layers]]
   name = "trails"
   geometry_fieldname = "way"
   id_fieldname = "osm_id"
   fields = ["name", "highway", "surface"]
+  geometry_type = "linestring"
   sql = """
     SELECT
       osm_id,
@@ -20,6 +22,9 @@ connection = "host=postgres user=osm dbname=osm password=osm sslmode=disable"
       way
     FROM planet_osm_line
     WHERE highway IN ('path', 'track')
+      AND way && !BBOX!
+      AND ST_GeometryType(way) = 'ST_LineString'
+      AND ST_IsValid(way)
   """
 
 [[maps]]
@@ -27,6 +32,6 @@ name = "trails"
 
   [[maps.layers]]
   name = "trails"  # ← REQUIRED: this is the layer name in the tile output
-  provider_layer = "trails"
+  provider_layer = "osm.trails"
   min_zoom = 10
   max_zoom = 17
