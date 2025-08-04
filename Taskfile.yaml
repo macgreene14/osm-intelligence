@@ -1,0 +1,78 @@
+version: "3"
+
+vars:
+  # REGION: utah
+  # REGION: washington
+  REGION: california
+  # REGION: montana
+  OSM_URL: https://download.geofabrik.de/north-america/us/{{.REGION}}-latest.osm.pbf
+  PBF_FILE: data/{{.REGION}}.osm.pbf
+  PG_CONTAINER: postgres
+  PG_DB: osm
+  PG_USER: osm
+  PG_PASS: osm
+  PG_PORT: 5432
+  DOCKER_COMPOSE: docker-compose --file deploy/docker-compose.yaml
+
+tasks:
+  up:
+    desc: Start the Docker Compose stack (Postgres, Tegola)
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d"
+
+  down:
+    desc: Stop and remove the Docker Compose stack
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down"
+
+  restart:
+    desc: Restart Docker services
+    cmds:
+      - task: down
+      - task: up
+
+  download-osm:
+    desc: Download OSM .pbf extract for a region (Montana)
+    cmds:
+      - mkdir -p data
+      - echo "Downloading {{.REGION}}..."
+      - curl -L "{{.OSM_URL}}" -o "{{.PBF_FILE}}"
+    sources:
+      - "{{.PBF_FILE}}"
+
+  import-osm:
+    desc: Import OSM .pbf file into PostGIS using osm2pgsql
+    deps:
+      - download-osm
+    cmds:
+      - |
+        docker run --rm \
+          -v $PWD/data:/data \
+          --network host \
+          -e PGPASSWORD=osm \
+          iboates/osm2pgsql:latest \
+          osm2pgsql \
+            -d osm \
+            -U osm \
+            -H localhost \
+            --create --slim \
+            --hstore-all \
+            /data/{{.REGION}}.osm.pbf
+  import-osm-append:
+    desc: Import OSM .pbf file into PostGIS using osm2pgsql
+    deps:
+      - download-osm
+    cmds:
+      - |
+        docker run --rm \
+          -v $PWD/data:/data \
+          --network host \
+          -e PGPASSWORD=osm \
+          iboates/osm2pgsql:latest \
+          osm2pgsql \
+            -d osm \
+            -U osm \
+            -H localhost \
+            --append --slim \
+            --hstore-all \
+            /data/{{.REGION}}.osm.pbf

@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: kartoza/postgis:latest # Includes PostGIS + PostgreSQL 15
+    container_name: postgres
+    environment:
+      POSTGRES_DB: osm
+      POSTGRES_USER: osm
+      POSTGRES_PASSWORD: osm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../data:/mnt/data # mount .pbf files for import
+    restart: unless-stopped
+
+  tegola:
+    image: gospatial/tegola:v0.21.2
+    container_name: tegola
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./tegola.toml:/config.toml:ro
+    command: serve --config /config.toml
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

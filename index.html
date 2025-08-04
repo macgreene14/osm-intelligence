@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OSM Intelligence - Montana Trails</title>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="config.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .map-overlay {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 10px;
+        border-radius: 5px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="map-overlay">
+      <h3>Montana Trails</h3>
+      <p>OSM trails data served by Tegola</p>
+    </div>
+
+    <script>
+      // Mapbox token is injected at deploy time via GitHub Actions.
+      // For local dev, create config.js with: window.MAPBOX_TOKEN = "your-token-here";
+      mapboxgl.accessToken = window.MAPBOX_TOKEN || "MAPBOX_TOKEN_PLACEHOLDER";
+
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/macgreene14/cllbbtiyh00d301puada5ds56",
+        center: [-110.5, 46.8], // Montana center
+        zoom: 12,
+      });
+
+      map.on("load", function () {
+        // Add navigation control (compass and zoom buttons)
+        map.addControl(new mapboxgl.NavigationControl(), "top-right");
+
+        // Add geolocate control (location button)
+        map.addControl(
+          new mapboxgl.GeolocateControl({
+            positionOptions: {
+              enableHighAccuracy: true,
+            },
+            // When active the map will receive updates to the device's location as it changes.
+            trackUserLocation: true,
+            // Draw an arrow next to the location dot to indicate which direction the device is heading.
+            showUserHeading: true,
+          }),
+          "top-right"
+        );
+
+        // Add scale control
+        map.addControl(
+          new mapboxgl.ScaleControl({
+            maxWidth: 80,
+            unit: "imperial",
+          }),
+          "bottom-left"
+        );
+
+        // Add fullscreen control
+        map.addControl(new mapboxgl.FullscreenControl(), "top-right");
+        // Add Tegola trails source
+        map.addSource("trails", {
+          type: "vector",
+          tiles: ["http://localhost:8080/maps/trails/{z}/{x}/{y}.mvt"],
+          minzoom: 1,
+          maxzoom: 22,
+        });
+
+        // Add trails layer with styling
+        map.addLayer({
+          id: "trails-layer",
+          type: "line",
+          source: "trails",
+          "source-layer": "trails",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "blue",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 17, 3],
+            "line-opacity": 0.8,
+          },
+        });
+        map.addLayer({
+          id: "trails-labels",
+          type: "symbol",
+          source: "trails",
+          "source-layer": "trails",
+          layout: {
+            "text-field": ["get", "name"], // assumes your data has a "name" property
+            "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+            "text-size": 32, // increase for larger text
+            "symbol-placement": "line", // places text along the trail
+          },
+          paint: {
+            "text-color": "#000000",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 4,
+          },
+        });
+
+        // Add popup on click
+        map.on("click", "trails-layer", function (e) {
+          const properties = e.features[0].properties;
+          const popup = new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `
+                        <h4>${properties.name || "Unnamed Trail"}</h4>
+                        <p><strong>Type:</strong> ${properties.highway}</p>
+                        <p><strong>Surface:</strong> ${
+                          properties.surface || "Unknown"
+                        }</p>
+                    `
+            )
+            .addTo(map);
+        });
+
+        // Change cursor on hover
+        map.on("mouseenter", "trails-layer", function () {
+          map.getCanvas().style.cursor = "pointer";
+        });
+
+        map.on("mouseleave", "trails-layer", function () {
+          map.getCanvas().style.cursor = "";
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,73 @@
+# https://tegola.io/documentation/configuration/
+[webserver]
+port = ":8080"
+
+[[providers]]
+name = "osm"
+type = "postgis"
+uri = "postgres://osm:osm@postgres:5432/osm?sslmode=disable"
+
+
+[[providers.layers]]
+name = "trails"
+geometry_type = "linestring"
+sql = """
+SELECT
+  CAST(COALESCE(osm_id, 0) AS bigint) as osm_id,
+  COALESCE(name, '') as name,
+  COALESCE(highway, '') as highway,
+  COALESCE(surface, '') as surface,
+  COALESCE(bicycle, '') as bicycle,
+  COALESCE(foot, '') as foot,
+  COALESCE(leisure, '') as leisure,
+  COALESCE(route, '') as route,
+  COALESCE(tourism, '') as tourism,
+  COALESCE(tracktype, '') as tracktype,
+  COALESCE(access, '') as access,
+  ST_AsBinary(way) AS geom
+FROM planet_osm_line
+WHERE way && !BBOX!
+  AND ST_IsValid(way)
+  AND way IS NOT NULL
+  AND (
+    -- Recreational highways
+    highway IN (
+      'path', 'track', 'bridleway', 'cycleway', 'footway', 'pedestrian',
+      'steps', 'via_ferrata'
+    )
+    -- Designated bicycle routes
+    OR bicycle IN ('designated', 'yes', 'permissive')
+    -- Pedestrian routes
+    OR foot IN ('yes', 'designated', 'permissive')
+    -- Leisure facilities
+    OR leisure IN (
+      'track', 'sports_centre', 'fitness_station', 'pitch'
+    )
+    -- Tourism routes
+    OR tourism IN ('information', 'viewpoint')
+    -- Named routes that suggest recreational use
+    OR route IN ('hiking', 'foot', 'bicycle', 'mtb', 'horse', 'ski')
+    -- Recreational keywords in names
+    OR name ILIKE '%trail%'
+    OR name ILIKE '%path%'
+    OR name ILIKE '%bike%'
+    OR name ILIKE '%cycle%'
+    OR name ILIKE '%hike%'
+    OR name ILIKE '%hiking%'
+    OR name ILIKE '%walk%'
+    OR name ILIKE '%running%'
+    OR name ILIKE '%ski%'
+    OR name ILIKE '%snowshoe%'
+    -- Track types for unpaved recreational routes
+    OR (highway = 'track' AND tracktype IN ('grade1', 'grade2', 'grade3'))
+  )
+"""
+
+[[maps]]
+name = "trails"
+
+[[maps.layers]]
+name = "trails"               # ← REQUIRED: this is the layer name in the tile output
+provider_layer = "osm.trails"
+min_zoom = 5
+max_zoom = 22
