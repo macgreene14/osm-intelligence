@@ -7,31 +7,31 @@ name = "osm"
 type = "postgis"
 uri = "postgres://osm:osm@postgres:5432/osm?sslmode=disable"
 
-  [[providers.layers]]
-  name = "trails"
-  geometry_fieldname = "way"
-  id_fieldname = "osm_id"
-  fields = ["name", "highway", "surface"]
-  geometry_type = "linestring"
-  sql = """
-    SELECT
-      osm_id,
-      name,
-      highway,
-      surface,
-      way
-    FROM planet_osm_line
-    WHERE highway IN ('path', 'track')
-      AND way && !BBOX!
-      AND ST_GeometryType(way) = 'ST_LineString'
-      AND ST_IsValid(way)
+[[providers.layers]]
+name = "trails"
+geometry_type = "linestring"
+sql = """
+SELECT
+  osm_id,
+  name,
+  highway,
+  surface,
+  ST_AsBinary(way, !BBOX!) AS geom
+FROM planet_osm_line
+WHERE way && !BBOX!
+  AND ST_IsValid(way)
+  AND highway IN ('path', 'track')
+  AND (
+    bicycle IN ('designated', 'yes')
+    OR name ILIKE '%mountain bike%'
+  )
   """
 
 [[maps]]
 name = "trails"
 
-  [[maps.layers]]
-  name = "trails"  # ← REQUIRED: this is the layer name in the tile output
-  provider_layer = "osm.trails"
-  min_zoom = 10
-  max_zoom = 17
+[[maps.layers]]
+name = "trails"               # ← REQUIRED: this is the layer name in the tile output
+provider_layer = "osm.trails"
+min_zoom = 1
+max_zoom = 22

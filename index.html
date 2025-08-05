@@ -42,31 +42,67 @@
     <script>
       // Note: Replace 'YOUR_MAPBOX_TOKEN' with an actual Mapbox access token
       // For demo purposes, using a basic style without token
-      //   mapboxgl.accessToken = "pk.your_token_here";
+      mapboxgl.accessToken =
+        "";
 
       const map = new mapboxgl.Map({
         container: "map",
-        // Using a basic style that doesn't require token for demo
-        style: {
-          version: 8,
-          sources: {
-            osm: {
-              type: "raster",
-              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-              tileSize: 256,
-              attribution: "© OpenStreetMap contributors",
-            },
-          },
-          layers: [
-            {
-              id: "osm",
-              type: "raster",
-              source: "osm",
-            },
-          ],
-        },
+        style: "mapbox://styles/mapbox/satellite-streets-v12",
         center: [-110.5, 46.8], // Montana center
         zoom: 8,
+      });
+
+      map.on("load", function () {
+        // Add Tegola trails source
+        map.addSource("trails", {
+          type: "vector",
+          tiles: ["http://localhost:8080/maps/trails/{z}/{x}/{y}.mvt"],
+          minzoom: 1,
+          maxzoom: 22,
+        });
+
+        // Add trails layer with styling
+        map.addLayer({
+          id: "trails-layer",
+          type: "line",
+          source: "trails",
+          "source-layer": "trails",
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "blue",
+            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 17, 3],
+            "line-opacity": 0.8,
+          },
+        });
+
+        // Add popup on click
+        map.on("click", "trails-layer", function (e) {
+          const properties = e.features[0].properties;
+          const popup = new mapboxgl.Popup()
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `
+                        <h4>${properties.name || "Unnamed Trail"}</h4>
+                        <p><strong>Type:</strong> ${properties.highway}</p>
+                        <p><strong>Surface:</strong> ${
+                          properties.surface || "Unknown"
+                        }</p>
+                    `
+            )
+            .addTo(map);
+        });
+
+        // Change cursor on hover
+        map.on("mouseenter", "trails-layer", function () {
+          map.getCanvas().style.cursor = "pointer";
+        });
+
+        map.on("mouseleave", "trails-layer", function () {
+          map.getCanvas().style.cursor = "";
+        });
       });
     </script>
   </body>
