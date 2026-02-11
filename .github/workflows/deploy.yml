@@ -27,10 +27,16 @@ jobs:
         run: |
           echo "window.MAPBOX_TOKEN = \"${{ secrets.MAPBOX_TOKEN }}\";" > config.js
 
+      - name: Download PMTiles from release
+        run: |
+          gh release download v0.1.0 --pattern "*.pmtiles" --dir .
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Prepare site
         run: |
           mkdir _site
-          cp index.html config.js _site/
+          cp index.html config.js montana-trails.pmtiles _site/
 
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3

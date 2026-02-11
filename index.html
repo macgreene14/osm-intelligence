@@ -105,8 +105,9 @@
       mapboxgl.accessToken = window.MAPBOX_TOKEN || "MAPBOX_TOKEN_PLACEHOLDER";
 
       // PMTiles URL — hosted as GitHub Release asset
+      // PMTiles served from same origin (GitHub Pages)
       const PMTILES_URL =
-        "https://github.com/macgreene14/osm-intelligence/releases/download/v0.1.0/montana-trails.pmtiles";
+        window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/') + "montana-trails.pmtiles";
 
       const map = new mapboxgl.Map({
         container: "map",
