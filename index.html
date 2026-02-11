@@ -5,254 +5,333 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OSM Intelligence - Montana Trails</title>
     <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
-    <link
-      href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css"
-      rel="stylesheet"
-    />
+    <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
+    <script src="config.js"></script>
     <style>
-      body {
-        margin: 0;
-        padding: 0;
-      }
-      #map {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 100%;
-      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+      /* Overlay panel */
       .map-overlay {
-        position: absolute;
-        top: 10px;
-        left: 10px;
+        position: absolute; top: 10px; left: 10px; z-index: 1;
         background: rgba(15, 23, 42, 0.88);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        padding: 12px 16px;
-        border-radius: 10px;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 13px;
-        color: #e2e8f0;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        z-index: 1;
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        padding: 12px 16px; border-radius: 10px;
+        font-size: 13px; color: #e2e8f0;
+        border: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
       }
-      .map-overlay h3 {
-        margin: 0 0 4px 0;
-        font-size: 15px;
-        color: #fff;
+      .map-overlay h3 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+      .map-overlay p { margin: 0; opacity: 0.7; font-size: 12px; }
+      .trail-type-legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+      .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.8; }
+      .legend-swatch { width: 16px; height: 3px; border-radius: 2px; }
+
+      /* Style switcher */
+      .style-switcher {
+        position: absolute; bottom: 24px; left: 10px; z-index: 1;
+        display: flex; gap: 6px; flex-wrap: wrap;
       }
-      .map-overlay p {
-        margin: 0;
-        opacity: 0.7;
-        font-size: 12px;
+      .style-btn {
+        width: 64px; height: 64px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15);
+        background-size: cover; background-position: center; cursor: pointer;
+        position: relative; overflow: hidden; transition: border-color 0.2s, transform 0.15s;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.4);
       }
-      .trail-type-legend {
-        margin-top: 8px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+      .style-btn:hover { transform: scale(1.05); border-color: rgba(255,255,255,0.4); }
+      .style-btn.active { border-color: #60a5fa; box-shadow: 0 0 0 1px #60a5fa, 0 2px 10px rgba(0,0,0,0.4); }
+      .style-btn span {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        background: rgba(0,0,0,0.7); color: #fff; font-size: 9px;
+        text-align: center; padding: 2px 0; font-weight: 600;
       }
-      .legend-item {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 11px;
-        opacity: 0.8;
-      }
-      .legend-swatch {
-        width: 16px;
-        height: 3px;
-        border-radius: 2px;
-      }
+
+      /* Popups */
       .maplibregl-popup-content {
-        background: rgba(15, 23, 42, 0.92) !important;
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 10px !important;
-        padding: 12px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
-        color: #e2e8f0;
+        background: rgba(15,23,42,0.92) !important;
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        border-radius: 10px !important; padding: 12px !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important; color: #e2e8f0;
       }
-      .maplibregl-popup-tip {
-        border-top-color: rgba(15, 23, 42, 0.92) !important;
+      .maplibregl-popup-tip { border-top-color: rgba(15,23,42,0.92) !important; }
+      .maplibregl-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
+
+      /* 3D terrain toggle */
+      .terrain-toggle {
+        position: absolute; top: 10px; right: 50px; z-index: 1;
+        background: rgba(15,23,42,0.88); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+        color: #e2e8f0; padding: 6px 12px; font-size: 12px; cursor: pointer;
+        font-family: inherit; transition: background 0.2s;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
       }
-      .maplibregl-popup-close-button {
-        color: #94a3b8 !important;
-        font-size: 18px !important;
-      }
+      .terrain-toggle:hover { background: rgba(30,41,59,0.95); }
+      .terrain-toggle.active { background: rgba(37,99,235,0.6); border-color: #60a5fa; }
     </style>
   </head>
   <body>
     <div id="map"></div>
+
     <div class="map-overlay">
       <h3>🏔️ Montana Trails</h3>
       <p>OSM recreational trails · PMTiles</p>
       <div class="trail-type-legend">
-        <div class="legend-item">
-          <div class="legend-swatch" style="background: #22d3ee"></div>
-          path
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background: #a78bfa"></div>
-          track
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background: #f472b6"></div>
-          cycleway
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background: #34d399"></div>
-          footway
-        </div>
-        <div class="legend-item">
-          <div class="legend-swatch" style="background: #fbbf24"></div>
-          bridleway
-        </div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#22d3ee"></div>path</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#a78bfa"></div>track</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f472b6"></div>cycleway</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#34d399"></div>footway</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#fbbf24"></div>bridleway</div>
       </div>
     </div>
 
+    <button class="terrain-toggle" id="terrainBtn" title="Toggle 3D terrain">⛰️ 3D</button>
+
+    <div class="style-switcher" id="styleSwitcher"></div>
+
     <script>
-      // Register PMTiles protocol with MapLibre
+      // ── Config ──
       const protocol = new pmtiles.Protocol();
       maplibregl.addProtocol("pmtiles", protocol.tile);
 
-      // PMTiles served from same origin (GitHub Pages)
       const base = window.location.href.replace(/\/[^/]*$/, "/");
       const PMTILES_URL = base + "montana-trails.pmtiles";
 
+      // Maptiler key for satellite/terrain (free tier: 100k tiles/mo)
+      const MAPTILER_KEY = (window.MAPTILER_KEY || "get_your_own_OpIi9ZULNHzrESv6T2vL");
+
+      // ── Map Styles ──
+      const STYLES = {
+        dark: {
+          name: "Dark",
+          preview: "https://basemaps.cartocdn.com/dark_all/6/16/22@2x.png",
+          style: {
+            version: 8,
+            sources: {
+              base: {
+                type: "raster",
+                tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+                tileSize: 256,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
+              },
+            },
+            layers: [{ id: "base", type: "raster", source: "base" }],
+          },
+        },
+        outdoors: {
+          name: "Outdoor",
+          preview: "https://tile.opentopomap.org/6/16/22.png",
+          style: {
+            version: 8,
+            sources: {
+              base: {
+                type: "raster",
+                tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+                tileSize: 256,
+                maxzoom: 17,
+                attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> © <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+              },
+            },
+            layers: [{ id: "base", type: "raster", source: "base" }],
+          },
+          trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", default: "#1d4ed8" },
+          labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
+        },
+        satellite: {
+          name: "Satellite",
+          preview: `https://api.maptiler.com/tiles/satellite-v2/6/16/22.jpg?key=${MAPTILER_KEY}`,
+          style: {
+            version: 8,
+            sources: {
+              base: {
+                type: "raster",
+                tiles: [`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`],
+                tileSize: 512,
+                maxzoom: 20,
+                attribution: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
+              },
+            },
+            layers: [{ id: "base", type: "raster", source: "base" }],
+          },
+        },
+        light: {
+          name: "Light",
+          preview: "https://basemaps.cartocdn.com/light_all/6/16/22@2x.png",
+          style: {
+            version: 8,
+            sources: {
+              base: {
+                type: "raster",
+                tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
+                tileSize: 256,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
+              },
+            },
+            layers: [{ id: "base", type: "raster", source: "base" }],
+          },
+          trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", default: "#2563eb" },
+          labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
+        },
+      };
+
+      let currentStyleKey = "dark";
+      let terrainEnabled = false;
+
+      // ── Trail layer config ──
+      function getTypeColors(styleKey) {
+        const c = STYLES[styleKey]?.trailColors;
+        if (!c) return ["match",["get","highway"],"path","#22d3ee","track","#a78bfa","cycleway","#f472b6","footway","#34d399","bridleway","#fbbf24","#60a5fa"];
+        return ["match",["get","highway"],"path",c.path,"track",c.track,"cycleway",c.cycleway,"footway",c.footway,"bridleway",c.bridleway,c.default];
+      }
+
+      function getLabelColors(styleKey) {
+        return STYLES[styleKey]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
+      }
+
+      // ── Init Map ──
       const map = new maplibregl.Map({
         container: "map",
-        style: {
-          version: 8,
-          sources: {
-            "dark-base": {
-              type: "raster",
-              tiles: [
-                "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png",
-              ],
-              tileSize: 256,
-              attribution:
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-            },
-          },
-          layers: [
-            {
-              id: "dark-base-layer",
-              type: "raster",
-              source: "dark-base",
-              minzoom: 0,
-              maxzoom: 20,
-            },
-          ],
-        },
+        style: STYLES.dark.style,
         center: [-110.5, 46.8],
         zoom: 7,
+        maxPitch: 85,
       });
 
-      map.on("load", function () {
-        map.addControl(new maplibregl.NavigationControl(), "top-right");
-        map.addControl(
-          new maplibregl.GeolocateControl({
-            positionOptions: { enableHighAccuracy: true },
-            trackUserLocation: true,
-            showUserHeading: true,
-          }),
-          "top-right"
-        );
-        map.addControl(
-          new maplibregl.ScaleControl({ maxWidth: 80, unit: "imperial" }),
-          "bottom-left"
-        );
-        map.addControl(new maplibregl.FullscreenControl(), "top-right");
+      function addTrailLayers() {
+        if (map.getSource("trails")) return;
+        const tc = getTypeColors(currentStyleKey);
+        const lc = getLabelColors(currentStyleKey);
 
-        // Add PMTiles source
-        map.addSource("trails", {
-          type: "vector",
-          url: "pmtiles://" + PMTILES_URL,
-        });
+        map.addSource("trails", { type: "vector", url: "pmtiles://" + PMTILES_URL });
 
-        // Color by highway type
-        const typeColors = [
-          "match",
-          ["get", "highway"],
-          "path",
-          "#22d3ee",
-          "track",
-          "#a78bfa",
-          "cycleway",
-          "#f472b6",
-          "footway",
-          "#34d399",
-          "bridleway",
-          "#fbbf24",
-          "#60a5fa",
-        ];
-
-        // Trail lines
         map.addLayer({
-          id: "trails-layer",
-          type: "line",
-          source: "trails",
-          "source-layer": "trails",
-          layout: {
-            "line-join": "round",
-            "line-cap": "round",
-          },
+          id: "trails-layer", type: "line", source: "trails", "source-layer": "trails",
+          layout: { "line-join": "round", "line-cap": "round" },
           paint: {
-            "line-color": typeColors,
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              7,
-              0.5,
-              12,
-              1.5,
-              17,
-              3,
-            ],
-            "line-opacity": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              7,
-              0.4,
-              12,
-              0.8,
-            ],
+            "line-color": tc,
+            "line-width": ["interpolate",["linear"],["zoom"],7,0.5,12,1.5,17,3],
+            "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.8],
           },
         });
 
-        // Trail labels at higher zoom
         map.addLayer({
-          id: "trails-labels",
-          type: "symbol",
-          source: "trails",
-          "source-layer": "trails",
+          id: "trails-labels", type: "symbol", source: "trails", "source-layer": "trails",
           minzoom: 12,
           layout: {
-            "text-field": ["get", "name"],
+            "text-field": ["get","name"],
             "text-font": ["Open Sans Bold"],
-            "text-size": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              12,
-              10,
-              17,
-              14,
-            ],
+            "text-size": ["interpolate",["linear"],["zoom"],12,10,17,14],
             "symbol-placement": "line",
             "text-allow-overlap": false,
           },
-          paint: {
-            "text-color": "#e2e8f0",
-            "text-halo-color": "rgba(15, 23, 42, 0.9)",
-            "text-halo-width": 2,
-          },
+          paint: { "text-color": lc.text, "text-halo-color": lc.halo, "text-halo-width": 2 },
         });
+      }
+
+      function removeTrailLayers() {
+        if (map.getLayer("trails-labels")) map.removeLayer("trails-labels");
+        if (map.getLayer("trails-layer")) map.removeLayer("trails-layer");
+        if (map.getSource("trails")) map.removeSource("trails");
+      }
+
+      // ── Style Switching ──
+      function switchStyle(key) {
+        if (key === currentStyleKey) return;
+        currentStyleKey = key;
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const pitch = map.getPitch();
+        const bearing = map.getBearing();
+
+        map.setStyle(STYLES[key].style);
+
+        map.once("style.load", () => {
+          map.setCenter(center);
+          map.setZoom(zoom);
+          map.setPitch(pitch);
+          map.setBearing(bearing);
+          addTrailLayers();
+          if (terrainEnabled) applyTerrain();
+        });
+
+        // Update active button
+        document.querySelectorAll(".style-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.style === key);
+        });
+      }
+
+      // ── 3D Terrain ──
+      function applyTerrain() {
+        if (!map.getSource("terrain-dem")) {
+          map.addSource("terrain-dem", {
+            type: "raster-dem",
+            tiles: [`https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.webp?key=${MAPTILER_KEY}`],
+            tileSize: 256,
+            maxzoom: 14,
+          });
+        }
+        map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
+
+        // Add sky if not present
+        if (!map.getLayer("sky")) {
+          map.addLayer({
+            id: "sky", type: "sky", paint: {
+              "sky-type": "atmosphere",
+              "sky-atmosphere-sun": [0, 0],
+              "sky-atmosphere-sun-intensity": 15,
+            },
+          });
+        }
+      }
+
+      function removeTerrain() {
+        map.setTerrain(null);
+        if (map.getLayer("sky")) map.removeLayer("sky");
+      }
+
+      function toggleTerrain() {
+        terrainEnabled = !terrainEnabled;
+        const btn = document.getElementById("terrainBtn");
+        btn.classList.toggle("active", terrainEnabled);
+
+        if (terrainEnabled) {
+          applyTerrain();
+          // Tilt for 3D effect
+          map.easeTo({ pitch: 60, duration: 800 });
+        } else {
+          removeTerrain();
+          map.easeTo({ pitch: 0, duration: 800 });
+        }
+      }
+
+      // ── Build Style Switcher ──
+      const switcher = document.getElementById("styleSwitcher");
+      Object.entries(STYLES).forEach(([key, cfg]) => {
+        const btn = document.createElement("div");
+        btn.className = "style-btn" + (key === currentStyleKey ? " active" : "");
+        btn.dataset.style = key;
+        btn.style.backgroundImage = `url(${cfg.preview})`;
+        btn.innerHTML = `<span>${cfg.name}</span>`;
+        btn.addEventListener("click", () => switchStyle(key));
+        switcher.appendChild(btn);
+      });
+
+      // ── Terrain Button ──
+      document.getElementById("terrainBtn").addEventListener("click", toggleTerrain);
+
+      // ── Map Load ──
+      map.on("load", function () {
+        map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+        map.addControl(new maplibregl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: true, showUserHeading: true,
+        }), "top-right");
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: "imperial" }), "bottom-left");
+        map.addControl(new maplibregl.FullscreenControl(), "top-right");
+
+        addTrailLayers();
 
         // Click popup
         map.on("click", "trails-layer", function (e) {
@@ -260,9 +339,7 @@
           new maplibregl.Popup({ maxWidth: "260px" })
             .setLngLat(e.lngLat)
             .setHTML(
-              `<strong style="font-size:14px">${
-                p.name || "Unnamed Trail"
-              }</strong>
+              `<strong style="font-size:14px">${p.name || "Unnamed Trail"}</strong>
               <div style="margin-top:6px;font-size:12px;opacity:0.8">
                 ${p.highway ? `<div>Type: ${p.highway}</div>` : ""}
                 ${p.surface ? `<div>Surface: ${p.surface}</div>` : ""}
@@ -272,12 +349,8 @@
             .addTo(map);
         });
 
-        map.on("mouseenter", "trails-layer", () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", "trails-layer", () => {
-          map.getCanvas().style.cursor = "";
-        });
+        map.on("mouseenter", "trails-layer", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "trails-layer", () => { map.getCanvas().style.cursor = ""; });
       });
     </script>
   </body>

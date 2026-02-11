@@ -29,10 +29,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Inject config
+        run: |
+          cat > config.js << 'EOF'
+          window.MAPTILER_KEY = "${{ secrets.MAPTILER_KEY }}";
+          EOF
+
       - name: Prepare site
         run: |
           mkdir _site
-          cp index.html montana-trails.pmtiles _site/
+          cp index.html config.js montana-trails.pmtiles _site/
 
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
