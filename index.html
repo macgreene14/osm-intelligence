@@ -4,11 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OSM Intelligence - Montana Trails</title>
-    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
     <link
-      href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css"
+      href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css"
       rel="stylesheet"
     />
+    <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
     <script src="config.js"></script>
     <style>
       body {
@@ -25,71 +26,135 @@
         position: absolute;
         top: 10px;
         left: 10px;
-        background: rgba(255, 255, 255, 0.9);
-        padding: 10px;
-        border-radius: 5px;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
+        background: rgba(15, 23, 42, 0.88);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13px;
+        color: #e2e8f0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+      .map-overlay h3 {
+        margin: 0 0 4px 0;
+        font-size: 15px;
+        color: #fff;
+      }
+      .map-overlay p {
+        margin: 0;
+        opacity: 0.7;
+        font-size: 12px;
+      }
+      .trail-type-legend {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        opacity: 0.8;
+      }
+      .legend-swatch {
+        width: 16px;
+        height: 3px;
+        border-radius: 2px;
       }
     </style>
   </head>
   <body>
     <div id="map"></div>
     <div class="map-overlay">
-      <h3>Montana Trails</h3>
-      <p>OSM trails data served by Tegola</p>
+      <h3>🏔️ Montana Trails</h3>
+      <p>OSM recreational trails · PMTiles</p>
+      <div class="trail-type-legend">
+        <div class="legend-item">
+          <div class="legend-swatch" style="background: #22d3ee"></div>
+          path
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background: #a78bfa"></div>
+          track
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background: #f472b6"></div>
+          cycleway
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background: #34d399"></div>
+          footway
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background: #fbbf24"></div>
+          bridleway
+        </div>
+      </div>
     </div>
 
     <script>
-      // Mapbox token is injected at deploy time via GitHub Actions.
-      // For local dev, create config.js with: window.MAPBOX_TOKEN = "your-token-here";
+      // Register PMTiles protocol
+      const protocol = new pmtiles.Protocol();
+      mapboxgl.addProtocol("pmtiles", protocol.tile);
+
+      // Mapbox token injected at deploy time via GitHub Actions
       mapboxgl.accessToken = window.MAPBOX_TOKEN || "MAPBOX_TOKEN_PLACEHOLDER";
+
+      // PMTiles URL — hosted as GitHub Release asset
+      const PMTILES_URL =
+        "https://github.com/macgreene14/osm-intelligence/releases/download/v0.1.0/montana-trails.pmtiles";
 
       const map = new mapboxgl.Map({
         container: "map",
-        style: "mapbox://styles/macgreene14/cllbbtiyh00d301puada5ds56",
-        center: [-110.5, 46.8], // Montana center
-        zoom: 12,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-110.5, 46.8],
+        zoom: 7,
       });
 
       map.on("load", function () {
-        // Add navigation control (compass and zoom buttons)
         map.addControl(new mapboxgl.NavigationControl(), "top-right");
-
-        // Add geolocate control (location button)
         map.addControl(
           new mapboxgl.GeolocateControl({
-            positionOptions: {
-              enableHighAccuracy: true,
-            },
-            // When active the map will receive updates to the device's location as it changes.
+            positionOptions: { enableHighAccuracy: true },
             trackUserLocation: true,
-            // Draw an arrow next to the location dot to indicate which direction the device is heading.
             showUserHeading: true,
           }),
           "top-right"
         );
-
-        // Add scale control
         map.addControl(
-          new mapboxgl.ScaleControl({
-            maxWidth: 80,
-            unit: "imperial",
-          }),
+          new mapboxgl.ScaleControl({ maxWidth: 80, unit: "imperial" }),
           "bottom-left"
         );
-
-        // Add fullscreen control
         map.addControl(new mapboxgl.FullscreenControl(), "top-right");
-        // Add Tegola trails source
+
+        // Add PMTiles source
         map.addSource("trails", {
           type: "vector",
-          tiles: ["http://localhost:8080/maps/trails/{z}/{x}/{y}.mvt"],
-          minzoom: 1,
-          maxzoom: 22,
+          url: `pmtiles://${PMTILES_URL}`,
         });
 
-        // Add trails layer with styling
+        // Color by highway type
+        const typeColors = [
+          "match",
+          ["get", "highway"],
+          "path",
+          "#22d3ee",
+          "track",
+          "#a78bfa",
+          "cycleway",
+          "#f472b6",
+          "footway",
+          "#34d399",
+          "bridleway",
+          "#fbbf24",
+          "#60a5fa", // default
+        ];
+
+        // Trail lines
         map.addLayer({
           id: "trails-layer",
           type: "line",
@@ -100,55 +165,89 @@
             "line-cap": "round",
           },
           paint: {
-            "line-color": "blue",
-            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 17, 3],
-            "line-opacity": 0.8,
+            "line-color": typeColors,
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7,
+              0.5,
+              12,
+              1.5,
+              17,
+              3,
+            ],
+            "line-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.4, 12, 0.8],
           },
         });
+
+        // Trail labels at higher zoom
         map.addLayer({
           id: "trails-labels",
           type: "symbol",
           source: "trails",
           "source-layer": "trails",
+          minzoom: 12,
           layout: {
-            "text-field": ["get", "name"], // assumes your data has a "name" property
+            "text-field": ["get", "name"],
             "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
-            "text-size": 32, // increase for larger text
-            "symbol-placement": "line", // places text along the trail
+            "text-size": ["interpolate", ["linear"], ["zoom"], 12, 10, 17, 14],
+            "symbol-placement": "line",
+            "text-allow-overlap": false,
           },
           paint: {
-            "text-color": "#000000",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 4,
+            "text-color": "#e2e8f0",
+            "text-halo-color": "rgba(15, 23, 42, 0.9)",
+            "text-halo-width": 2,
           },
         });
 
-        // Add popup on click
+        // Click popup
         map.on("click", "trails-layer", function (e) {
-          const properties = e.features[0].properties;
-          const popup = new mapboxgl.Popup()
+          const p = e.features[0].properties;
+          new mapboxgl.Popup({
+            className: "dark-popup",
+            maxWidth: "260px",
+          })
             .setLngLat(e.lngLat)
             .setHTML(
-              `
-                        <h4>${properties.name || "Unnamed Trail"}</h4>
-                        <p><strong>Type:</strong> ${properties.highway}</p>
-                        <p><strong>Surface:</strong> ${
-                          properties.surface || "Unknown"
-                        }</p>
-                    `
+              `<div style="font-family:-apple-system,sans-serif;color:#e2e8f0">
+                <strong style="font-size:14px">${p.name || "Unnamed Trail"}</strong>
+                <div style="margin-top:6px;font-size:12px;opacity:0.8">
+                  ${p.highway ? `<div>Type: ${p.highway}</div>` : ""}
+                  ${p.surface ? `<div>Surface: ${p.surface}</div>` : ""}
+                  ${p.route ? `<div>Route: ${p.route}</div>` : ""}
+                </div>
+              </div>`
             )
             .addTo(map);
         });
 
-        // Change cursor on hover
-        map.on("mouseenter", "trails-layer", function () {
+        map.on("mouseenter", "trails-layer", () => {
           map.getCanvas().style.cursor = "pointer";
         });
-
-        map.on("mouseleave", "trails-layer", function () {
+        map.on("mouseleave", "trails-layer", () => {
           map.getCanvas().style.cursor = "";
         });
       });
     </script>
+    <style>
+      .mapboxgl-popup-content {
+        background: rgba(15, 23, 42, 0.92) !important;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+      }
+      .mapboxgl-popup-tip {
+        border-top-color: rgba(15, 23, 42, 0.92) !important;
+      }
+      .mapboxgl-popup-close-button {
+        color: #94a3b8 !important;
+        font-size: 18px !important;
+      }
+    </style>
   </body>
 </html>
