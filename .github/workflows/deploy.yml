@@ -31,9 +31,7 @@ jobs:
 
       - name: Inject config
         run: |
-          cat > config.js << 'EOF'
-          window.MAPTILER_KEY = "${{ secrets.MAPTILER_KEY }}";
-          EOF
+          echo "window.MAPTILER_KEY = \"${{ secrets.MAPTILER_KEY }}\";" > config.js
 
       - name: Prepare site
         run: |

@@ -7,7 +7,6 @@
     <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
-    <script src="config.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
@@ -22,6 +21,7 @@
         font-size: 13px; color: #e2e8f0;
         border: 1px solid rgba(255,255,255,0.1);
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        max-width: 220px;
       }
       .map-overlay h3 { margin: 0 0 4px; font-size: 15px; color: #fff; }
       .map-overlay p { margin: 0; opacity: 0.7; font-size: 12px; }
@@ -29,13 +29,17 @@
       .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.8; }
       .legend-swatch { width: 16px; height: 3px; border-radius: 2px; }
 
-      /* Style switcher */
-      .style-switcher {
-        position: absolute; bottom: 24px; left: 10px; z-index: 1;
-        display: flex; gap: 6px; flex-wrap: wrap;
+      /* Bottom bar: style switcher + 3D toggle */
+      .bottom-bar {
+        position: absolute; bottom: 24px; left: 10px; right: 10px; z-index: 1;
+        display: flex; align-items: flex-end; justify-content: space-between;
+        pointer-events: none;
       }
+      .bottom-bar > * { pointer-events: auto; }
+
+      .style-switcher { display: flex; gap: 6px; flex-wrap: wrap; }
       .style-btn {
-        width: 64px; height: 64px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15);
+        width: 56px; height: 56px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.15);
         background-size: cover; background-position: center; cursor: pointer;
         position: relative; overflow: hidden; transition: border-color 0.2s, transform 0.15s;
         box-shadow: 0 2px 10px rgba(0,0,0,0.4);
@@ -48,6 +52,17 @@
         text-align: center; padding: 2px 0; font-weight: 600;
       }
 
+      /* 3D terrain toggle pill */
+      .terrain-toggle {
+        background: rgba(15,23,42,0.88); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+        color: #e2e8f0; padding: 8px 14px; font-size: 13px; cursor: pointer;
+        font-family: inherit; transition: background 0.2s;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3); white-space: nowrap;
+      }
+      .terrain-toggle:hover { background: rgba(30,41,59,0.95); }
+      .terrain-toggle.active { background: rgba(37,99,235,0.6); border-color: #60a5fa; }
+
       /* Popups */
       .maplibregl-popup-content {
         background: rgba(15,23,42,0.92) !important;
@@ -59,17 +74,12 @@
       .maplibregl-popup-tip { border-top-color: rgba(15,23,42,0.92) !important; }
       .maplibregl-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
 
-      /* 3D terrain toggle */
-      .terrain-toggle {
-        position: absolute; top: 10px; right: 50px; z-index: 1;
-        background: rgba(15,23,42,0.88); backdrop-filter: blur(12px);
-        border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
-        color: #e2e8f0; padding: 6px 12px; font-size: 12px; cursor: pointer;
-        font-family: inherit; transition: background 0.2s;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      @media (max-width: 480px) {
+        .map-overlay { max-width: 180px; padding: 8px 12px; font-size: 12px; }
+        .map-overlay h3 { font-size: 13px; }
+        .style-btn { width: 48px; height: 48px; }
+        .bottom-bar { bottom: 16px; left: 8px; right: 8px; }
       }
-      .terrain-toggle:hover { background: rgba(30,41,59,0.95); }
-      .terrain-toggle.active { background: rgba(37,99,235,0.6); border-color: #60a5fa; }
     </style>
   </head>
   <body>
@@ -87,53 +97,36 @@
       </div>
     </div>
 
-    <button class="terrain-toggle" id="terrainBtn" title="Toggle 3D terrain">⛰️ 3D</button>
-
-    <div class="style-switcher" id="styleSwitcher"></div>
+    <div class="bottom-bar">
+      <div class="style-switcher" id="styleSwitcher"></div>
+      <button class="terrain-toggle" id="terrainBtn" title="Toggle 3D terrain">⛰️ 3D</button>
+    </div>
 
     <script>
       // ── Config ──
       const protocol = new pmtiles.Protocol();
       maplibregl.addProtocol("pmtiles", protocol.tile);
 
-      const base = window.location.href.replace(/\/[^/]*$/, "/");
+      const base = window.location.href.replace(/\/[^/]*(\?.*)?$/, "/");
       const PMTILES_URL = base + "montana-trails.pmtiles";
 
-      // Maptiler key for satellite/terrain (free tier: 100k tiles/mo)
-      const MAPTILER_KEY = (window.MAPTILER_KEY || "get_your_own_OpIi9ZULNHzrESv6T2vL");
-
-      // ── Map Styles ──
+      // ── Map Styles (all free, no API keys) ──
       const STYLES = {
         dark: {
           name: "Dark",
           preview: "https://basemaps.cartocdn.com/dark_all/6/16/22@2x.png",
           style: {
             version: 8,
-            sources: {
-              base: {
-                type: "raster",
-                tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
-                tileSize: 256,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
-              },
-            },
+            sources: { base: { type: "raster", tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"], tileSize: 256, attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' } },
             layers: [{ id: "base", type: "raster", source: "base" }],
           },
         },
-        outdoors: {
-          name: "Outdoor",
+        topo: {
+          name: "Topo",
           preview: "https://tile.opentopomap.org/6/16/22.png",
           style: {
             version: 8,
-            sources: {
-              base: {
-                type: "raster",
-                tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
-                tileSize: 256,
-                maxzoom: 17,
-                attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> © <a href="https://www.openstreetmap.org/copyright">OSM</a>',
-              },
-            },
+            sources: { base: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 17, attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a>' } },
             layers: [{ id: "base", type: "raster", source: "base" }],
           },
           trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", default: "#1d4ed8" },
@@ -141,34 +134,21 @@
         },
         satellite: {
           name: "Satellite",
-          preview: `https://api.maptiler.com/tiles/satellite-v2/6/16/22.jpg?key=${MAPTILER_KEY}`,
+          preview: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/22/16",
           style: {
             version: 8,
-            sources: {
-              base: {
-                type: "raster",
-                tiles: [`https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${MAPTILER_KEY}`],
-                tileSize: 512,
-                maxzoom: 20,
-                attribution: '© <a href="https://www.maptiler.com/copyright/">MapTiler</a>',
-              },
-            },
+            sources: { base: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19, attribution: '© <a href="https://www.esri.com">Esri</a> — Imagery' } },
             layers: [{ id: "base", type: "raster", source: "base" }],
           },
+          trailColors: { path: "#67e8f9", track: "#c4b5fd", cycleway: "#f9a8d4", footway: "#6ee7b7", bridleway: "#fcd34d", default: "#93c5fd" },
+          labelColors: { text: "#ffffff", halo: "rgba(0,0,0,0.8)" },
         },
         light: {
           name: "Light",
           preview: "https://basemaps.cartocdn.com/light_all/6/16/22@2x.png",
           style: {
             version: 8,
-            sources: {
-              base: {
-                type: "raster",
-                tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
-                tileSize: 256,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>',
-              },
-            },
+            sources: { base: { type: "raster", tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], tileSize: 256, attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' } },
             layers: [{ id: "base", type: "raster", source: "base" }],
           },
           trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", default: "#2563eb" },
@@ -179,25 +159,15 @@
       let currentStyleKey = "dark";
       let terrainEnabled = false;
 
-      // ── Trail layer config ──
-      function getTypeColors(styleKey) {
-        const c = STYLES[styleKey]?.trailColors;
+      // ── Trail layer helpers ──
+      function getTypeColors(key) {
+        const c = STYLES[key]?.trailColors;
         if (!c) return ["match",["get","highway"],"path","#22d3ee","track","#a78bfa","cycleway","#f472b6","footway","#34d399","bridleway","#fbbf24","#60a5fa"];
         return ["match",["get","highway"],"path",c.path,"track",c.track,"cycleway",c.cycleway,"footway",c.footway,"bridleway",c.bridleway,c.default];
       }
-
-      function getLabelColors(styleKey) {
-        return STYLES[styleKey]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
+      function getLabelColors(key) {
+        return STYLES[key]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
       }
-
-      // ── Init Map ──
-      const map = new maplibregl.Map({
-        container: "map",
-        style: STYLES.dark.style,
-        center: [-110.5, 46.8],
-        zoom: 7,
-        maxPitch: 85,
-      });
 
       function addTrailLayers() {
         if (map.getSource("trails")) return;
@@ -212,7 +182,7 @@
           paint: {
             "line-color": tc,
             "line-width": ["interpolate",["linear"],["zoom"],7,0.5,12,1.5,17,3],
-            "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.8],
+            "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.85],
           },
         });
 
@@ -230,75 +200,49 @@
         });
       }
 
-      function removeTrailLayers() {
-        if (map.getLayer("trails-labels")) map.removeLayer("trails-labels");
-        if (map.getLayer("trails-layer")) map.removeLayer("trails-layer");
-        if (map.getSource("trails")) map.removeSource("trails");
-      }
-
       // ── Style Switching ──
       function switchStyle(key) {
         if (key === currentStyleKey) return;
         currentStyleKey = key;
-        const center = map.getCenter();
+        const { lng, lat } = map.getCenter();
         const zoom = map.getZoom();
         const pitch = map.getPitch();
         const bearing = map.getBearing();
 
         map.setStyle(STYLES[key].style);
-
         map.once("style.load", () => {
-          map.setCenter(center);
-          map.setZoom(zoom);
-          map.setPitch(pitch);
-          map.setBearing(bearing);
+          map.jumpTo({ center: [lng, lat], zoom, pitch, bearing });
           addTrailLayers();
           if (terrainEnabled) applyTerrain();
         });
 
-        // Update active button
-        document.querySelectorAll(".style-btn").forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.style === key);
-        });
+        document.querySelectorAll(".style-btn").forEach(b =>
+          b.classList.toggle("active", b.dataset.style === key));
       }
 
-      // ── 3D Terrain ──
+      // ── 3D Terrain (AWS Terrain Tiles — free, no key) ──
       function applyTerrain() {
         if (!map.getSource("terrain-dem")) {
           map.addSource("terrain-dem", {
             type: "raster-dem",
-            tiles: [`https://api.maptiler.com/tiles/terrain-rgb-v2/{z}/{x}/{y}.webp?key=${MAPTILER_KEY}`],
+            tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
             tileSize: 256,
-            maxzoom: 14,
+            maxzoom: 15,
+            encoding: "terrarium",
           });
         }
         map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
-
-        // Add sky if not present
-        if (!map.getLayer("sky")) {
-          map.addLayer({
-            id: "sky", type: "sky", paint: {
-              "sky-type": "atmosphere",
-              "sky-atmosphere-sun": [0, 0],
-              "sky-atmosphere-sun-intensity": 15,
-            },
-          });
-        }
       }
 
       function removeTerrain() {
         map.setTerrain(null);
-        if (map.getLayer("sky")) map.removeLayer("sky");
       }
 
       function toggleTerrain() {
         terrainEnabled = !terrainEnabled;
-        const btn = document.getElementById("terrainBtn");
-        btn.classList.toggle("active", terrainEnabled);
-
+        document.getElementById("terrainBtn").classList.toggle("active", terrainEnabled);
         if (terrainEnabled) {
           applyTerrain();
-          // Tilt for 3D effect
           map.easeTo({ pitch: 60, duration: 800 });
         } else {
           removeTerrain();
@@ -306,7 +250,7 @@
         }
       }
 
-      // ── Build Style Switcher ──
+      // ── Build UI ──
       const switcher = document.getElementById("styleSwitcher");
       Object.entries(STYLES).forEach(([key, cfg]) => {
         const btn = document.createElement("div");
@@ -318,10 +262,17 @@
         switcher.appendChild(btn);
       });
 
-      // ── Terrain Button ──
       document.getElementById("terrainBtn").addEventListener("click", toggleTerrain);
 
-      // ── Map Load ──
+      // ── Init Map ──
+      const map = new maplibregl.Map({
+        container: "map",
+        style: STYLES.dark.style,
+        center: [-110.5, 46.8],
+        zoom: 7,
+        maxPitch: 85,
+      });
+
       map.on("load", function () {
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
         map.addControl(new maplibregl.GeolocateControl({
@@ -333,7 +284,6 @@
 
         addTrailLayers();
 
-        // Click popup
         map.on("click", "trails-layer", function (e) {
           const p = e.features[0].properties;
           new maplibregl.Popup({ maxWidth: "260px" })
@@ -348,7 +298,6 @@
             )
             .addTo(map);
         });
-
         map.on("mouseenter", "trails-layer", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "trails-layer", () => { map.getCanvas().style.cursor = ""; });
       });
