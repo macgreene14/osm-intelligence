@@ -105,43 +105,41 @@
 
       const base = window.location.href.replace(/\/[^/]*(\?.*)?$/, "/");
       const PMTILES_URL = base + "montana-trails.pmtiles";
-
-      // ── Styles (all free, no API keys) ──
-      function makeStyle(tiles, tileSize, maxzoom, attribution) {
-        return {
-          version: 8,
-          glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-          sources: { base: { type: "raster", tiles, tileSize: tileSize || 256, maxzoom: maxzoom || 20, attribution } },
-          layers: [{ id: "base", type: "raster", source: "base" }],
-        };
-      }
-
       const ATTR_CARTO = '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>';
 
+      // ── Styles: only base tile URLs + trail color overrides ──
       const STYLES = {
         dark: {
           name: "Dark",
           preview: "https://basemaps.cartocdn.com/dark_all/6/16/22@2x.png",
-          style: makeStyle(["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"], 256, 20, ATTR_CARTO),
+          tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+          tileSize: 256, maxzoom: 20,
+          attribution: ATTR_CARTO,
         },
         topo: {
           name: "Topo",
           preview: "https://tile.opentopomap.org/6/16/22.png",
-          style: makeStyle(["https://tile.opentopomap.org/{z}/{x}/{y}.png"], 256, 17, '© <a href="https://opentopomap.org">OpenTopoMap</a>'),
+          tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+          tileSize: 256, maxzoom: 17,
+          attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a>',
           trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", default: "#1d4ed8" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
         satellite: {
           name: "Satellite",
           preview: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/22/16",
-          style: makeStyle(["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], 256, 19, '© <a href="https://www.esri.com">Esri</a>'),
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256, maxzoom: 19,
+          attribution: '© <a href="https://www.esri.com">Esri</a>',
           trailColors: { path: "#67e8f9", track: "#c4b5fd", cycleway: "#f9a8d4", footway: "#6ee7b7", bridleway: "#fcd34d", default: "#93c5fd" },
           labelColors: { text: "#ffffff", halo: "rgba(0,0,0,0.8)" },
         },
         light: {
           name: "Light",
           preview: "https://basemaps.cartocdn.com/light_all/6/16/22@2x.png",
-          style: makeStyle(["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], 256, 20, ATTR_CARTO),
+          tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
+          tileSize: 256, maxzoom: 20,
+          attribution: ATTR_CARTO,
           trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", default: "#2563eb" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
@@ -150,7 +148,7 @@
       let currentStyleKey = "dark";
       let terrainEnabled = false;
 
-      // ── Trail colors ──
+      // ── Trail color helpers ──
       function getTypeColors(key) {
         const c = STYLES[key]?.trailColors;
         if (!c) return ["match",["get","highway"],"path","#22d3ee","track","#a78bfa","cycleway","#f472b6","footway","#34d399","bridleway","#fbbf24","#60a5fa"];
@@ -160,61 +158,105 @@
         return STYLES[key]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
       }
 
-      // ── Add trail + terrain layers (called after every style change) ──
-      function addOverlays() {
-        const tc = getTypeColors(currentStyleKey);
-        const lc = getLabelColors(currentStyleKey);
-
-        // PMTiles trails
-        map.addSource("trails", { type: "vector", url: "pmtiles://" + PMTILES_URL });
-
-        map.addLayer({
-          id: "trails-layer", type: "line", source: "trails", "source-layer": "trails",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": tc,
-            "line-width": ["interpolate",["linear"],["zoom"],7,0.5,12,1.5,17,3],
-            "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.85],
+      // ── Build initial style with ALL sources baked in ──
+      function buildFullStyle(key) {
+        const s = STYLES[key];
+        return {
+          version: 8,
+          glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+          sources: {
+            base: {
+              type: "raster",
+              tiles: s.tiles,
+              tileSize: s.tileSize,
+              maxzoom: s.maxzoom,
+              attribution: s.attribution,
+            },
+            trails: {
+              type: "vector",
+              url: "pmtiles://" + PMTILES_URL,
+            },
+            "terrain-dem": {
+              type: "raster-dem",
+              tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              maxzoom: 15,
+              encoding: "terrarium",
+            },
           },
-        });
+          terrain: terrainEnabled ? { source: "terrain-dem", exaggeration: 1.5 } : undefined,
+          layers: [
+            { id: "base", type: "raster", source: "base" },
+            {
+              id: "trails-layer", type: "line", source: "trails", "source-layer": "trails",
+              layout: { "line-join": "round", "line-cap": "round" },
+              paint: {
+                "line-color": getTypeColors(key),
+                "line-width": ["interpolate",["linear"],["zoom"],7,0.5,12,1.5,17,3],
+                "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.85],
+              },
+            },
+            {
+              id: "trails-labels", type: "symbol", source: "trails", "source-layer": "trails",
+              minzoom: 12,
+              layout: {
+                "text-field": ["get","name"],
+                "text-font": ["Open Sans Bold"],
+                "text-size": ["interpolate",["linear"],["zoom"],12,10,17,14],
+                "symbol-placement": "line",
+                "text-allow-overlap": false,
+              },
+              paint: {
+                "text-color": getLabelColors(key).text,
+                "text-halo-color": getLabelColors(key).halo,
+                "text-halo-width": 2,
+              },
+            },
+          ],
+        };
+      }
 
-        map.addLayer({
-          id: "trails-labels", type: "symbol", source: "trails", "source-layer": "trails",
-          minzoom: 12,
-          layout: {
-            "text-field": ["get","name"],
-            "text-font": ["Open Sans Bold"],
-            "text-size": ["interpolate",["linear"],["zoom"],12,10,17,14],
-            "symbol-placement": "line",
-            "text-allow-overlap": false,
-          },
-          paint: { "text-color": lc.text, "text-halo-color": lc.halo, "text-halo-width": 2 },
-        });
+      // ── Hot-swap: only replace base tiles + update trail colors (no setStyle!) ──
+      function switchStyle(key) {
+        if (key === currentStyleKey) return;
+        currentStyleKey = key;
+        const s = STYLES[key];
 
-        // Re-apply terrain if enabled
-        if (terrainEnabled) {
-          addTerrainSource();
-          map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
+        // Swap base raster source tiles — this is instant, tiles are fetched in background
+        const baseSource = map.getSource("base");
+        if (baseSource) {
+          // MapLibre raster source doesn't have setTiles, so we update via style mutation
+          // Remove and re-add just the base source + layer
+          map.removeLayer("base");
+          map.removeSource("base");
+          map.addSource("base", {
+            type: "raster",
+            tiles: s.tiles,
+            tileSize: s.tileSize,
+            maxzoom: s.maxzoom,
+            attribution: s.attribution,
+          });
+          // Re-add base layer BELOW trails
+          map.addLayer({ id: "base", type: "raster", source: "base" }, "trails-layer");
         }
+
+        // Update trail colors for this basemap
+        const tc = getTypeColors(key);
+        const lc = getLabelColors(key);
+        map.setPaintProperty("trails-layer", "line-color", tc);
+        map.setPaintProperty("trails-labels", "text-color", lc.text);
+        map.setPaintProperty("trails-labels", "text-halo-color", lc.halo);
+
+        // Update active button
+        document.querySelectorAll(".style-btn").forEach(b =>
+          b.classList.toggle("active", b.dataset.style === key));
       }
 
-      // ── Terrain ──
-      function addTerrainSource() {
-        if (map.getSource("terrain-dem")) return;
-        map.addSource("terrain-dem", {
-          type: "raster-dem",
-          tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          maxzoom: 15,
-          encoding: "terrarium",
-        });
-      }
-
+      // ── Terrain toggle ──
       function toggleTerrain() {
         terrainEnabled = !terrainEnabled;
         document.getElementById("terrainBtn").classList.toggle("active", terrainEnabled);
         if (terrainEnabled) {
-          addTerrainSource();
           map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
           map.easeTo({ pitch: 60, duration: 800 });
         } else {
@@ -223,27 +265,7 @@
         }
       }
 
-      // ── Style Switching ──
-      function switchStyle(key) {
-        if (key === currentStyleKey) return;
-        currentStyleKey = key;
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const pitch = map.getPitch();
-        const bearing = map.getBearing();
-
-        // setStyle wipes ALL sources and layers — must re-add everything
-        map.setStyle(STYLES[key].style);
-        map.once("style.load", () => {
-          map.jumpTo({ center, zoom, pitch, bearing });
-          addOverlays();
-        });
-
-        document.querySelectorAll(".style-btn").forEach(b =>
-          b.classList.toggle("active", b.dataset.style === key));
-      }
-
-      // ── Build UI ──
+      // ── Build style switcher UI ──
       const switcher = document.getElementById("styleSwitcher");
       Object.entries(STYLES).forEach(([key, cfg]) => {
         const btn = document.createElement("div");
@@ -256,10 +278,10 @@
       });
       document.getElementById("terrainBtn").addEventListener("click", toggleTerrain);
 
-      // ── Init Map ──
+      // ── Init map with full style (all sources pre-loaded) ──
       const map = new maplibregl.Map({
         container: "map",
-        style: STYLES.dark.style,
+        style: buildFullStyle("dark"),
         center: [-110.5, 46.8],
         zoom: 7,
         maxPitch: 85,
@@ -274,8 +296,7 @@
         map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: "imperial" }), "bottom-left");
         map.addControl(new maplibregl.FullscreenControl(), "top-right");
 
-        addOverlays();
-
+        // Click popup
         map.on("click", "trails-layer", function (e) {
           const p = e.features[0].properties;
           new maplibregl.Popup({ maxWidth: "260px" })
