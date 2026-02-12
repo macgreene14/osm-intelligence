@@ -12,7 +12,6 @@
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       #map { position: absolute; top: 0; bottom: 0; width: 100%; }
 
-      /* Overlay panel */
       .map-overlay {
         position: absolute; top: 10px; left: 10px; z-index: 1;
         background: rgba(15, 23, 42, 0.88);
@@ -29,7 +28,6 @@
       .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.8; }
       .legend-swatch { width: 16px; height: 3px; border-radius: 2px; }
 
-      /* Bottom bar: style switcher + 3D toggle */
       .bottom-bar {
         position: absolute; bottom: 24px; left: 10px; right: 10px; z-index: 1;
         display: flex; align-items: flex-end; justify-content: space-between;
@@ -52,7 +50,6 @@
         text-align: center; padding: 2px 0; font-weight: 600;
       }
 
-      /* 3D terrain toggle pill */
       .terrain-toggle {
         background: rgba(15,23,42,0.88); backdrop-filter: blur(12px);
         border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
@@ -63,7 +60,6 @@
       .terrain-toggle:hover { background: rgba(30,41,59,0.95); }
       .terrain-toggle.active { background: rgba(37,99,235,0.6); border-color: #60a5fa; }
 
-      /* Popups */
       .maplibregl-popup-content {
         background: rgba(15,23,42,0.92) !important;
         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -110,47 +106,42 @@
       const base = window.location.href.replace(/\/[^/]*(\?.*)?$/, "/");
       const PMTILES_URL = base + "montana-trails.pmtiles";
 
-      // ── Map Styles (all free, no API keys) ──
+      // ── Styles (all free, no API keys) ──
+      function makeStyle(tiles, tileSize, maxzoom, attribution) {
+        return {
+          version: 8,
+          glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+          sources: { base: { type: "raster", tiles, tileSize: tileSize || 256, maxzoom: maxzoom || 20, attribution } },
+          layers: [{ id: "base", type: "raster", source: "base" }],
+        };
+      }
+
+      const ATTR_CARTO = '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>';
+
       const STYLES = {
         dark: {
           name: "Dark",
           preview: "https://basemaps.cartocdn.com/dark_all/6/16/22@2x.png",
-          style: {
-            version: 8,
-            sources: { base: { type: "raster", tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"], tileSize: 256, attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' } },
-            layers: [{ id: "base", type: "raster", source: "base" }],
-          },
+          style: makeStyle(["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"], 256, 20, ATTR_CARTO),
         },
         topo: {
           name: "Topo",
           preview: "https://tile.opentopomap.org/6/16/22.png",
-          style: {
-            version: 8,
-            sources: { base: { type: "raster", tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"], tileSize: 256, maxzoom: 17, attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a>' } },
-            layers: [{ id: "base", type: "raster", source: "base" }],
-          },
+          style: makeStyle(["https://tile.opentopomap.org/{z}/{x}/{y}.png"], 256, 17, '© <a href="https://opentopomap.org">OpenTopoMap</a>'),
           trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", default: "#1d4ed8" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
         satellite: {
           name: "Satellite",
           preview: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/22/16",
-          style: {
-            version: 8,
-            sources: { base: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 19, attribution: '© <a href="https://www.esri.com">Esri</a> — Imagery' } },
-            layers: [{ id: "base", type: "raster", source: "base" }],
-          },
+          style: makeStyle(["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], 256, 19, '© <a href="https://www.esri.com">Esri</a>'),
           trailColors: { path: "#67e8f9", track: "#c4b5fd", cycleway: "#f9a8d4", footway: "#6ee7b7", bridleway: "#fcd34d", default: "#93c5fd" },
           labelColors: { text: "#ffffff", halo: "rgba(0,0,0,0.8)" },
         },
         light: {
           name: "Light",
           preview: "https://basemaps.cartocdn.com/light_all/6/16/22@2x.png",
-          style: {
-            version: 8,
-            sources: { base: { type: "raster", tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], tileSize: 256, attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>' } },
-            layers: [{ id: "base", type: "raster", source: "base" }],
-          },
+          style: makeStyle(["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"], 256, 20, ATTR_CARTO),
           trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", default: "#2563eb" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
@@ -159,7 +150,7 @@
       let currentStyleKey = "dark";
       let terrainEnabled = false;
 
-      // ── Trail layer helpers ──
+      // ── Trail colors ──
       function getTypeColors(key) {
         const c = STYLES[key]?.trailColors;
         if (!c) return ["match",["get","highway"],"path","#22d3ee","track","#a78bfa","cycleway","#f472b6","footway","#34d399","bridleway","#fbbf24","#60a5fa"];
@@ -169,11 +160,12 @@
         return STYLES[key]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
       }
 
-      function addTrailLayers() {
-        if (map.getSource("trails")) return;
+      // ── Add trail + terrain layers (called after every style change) ──
+      function addOverlays() {
         const tc = getTypeColors(currentStyleKey);
         const lc = getLabelColors(currentStyleKey);
 
+        // PMTiles trails
         map.addSource("trails", { type: "vector", url: "pmtiles://" + PMTILES_URL });
 
         map.addLayer({
@@ -198,56 +190,57 @@
           },
           paint: { "text-color": lc.text, "text-halo-color": lc.halo, "text-halo-width": 2 },
         });
-      }
 
-      // ── Style Switching ──
-      function switchStyle(key) {
-        if (key === currentStyleKey) return;
-        currentStyleKey = key;
-        const { lng, lat } = map.getCenter();
-        const zoom = map.getZoom();
-        const pitch = map.getPitch();
-        const bearing = map.getBearing();
-
-        map.setStyle(STYLES[key].style);
-        map.once("style.load", () => {
-          map.jumpTo({ center: [lng, lat], zoom, pitch, bearing });
-          addTrailLayers();
-          if (terrainEnabled) applyTerrain();
-        });
-
-        document.querySelectorAll(".style-btn").forEach(b =>
-          b.classList.toggle("active", b.dataset.style === key));
-      }
-
-      // ── 3D Terrain (AWS Terrain Tiles — free, no key) ──
-      function applyTerrain() {
-        if (!map.getSource("terrain-dem")) {
-          map.addSource("terrain-dem", {
-            type: "raster-dem",
-            tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            maxzoom: 15,
-            encoding: "terrarium",
-          });
+        // Re-apply terrain if enabled
+        if (terrainEnabled) {
+          addTerrainSource();
+          map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
         }
-        map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
       }
 
-      function removeTerrain() {
-        map.setTerrain(null);
+      // ── Terrain ──
+      function addTerrainSource() {
+        if (map.getSource("terrain-dem")) return;
+        map.addSource("terrain-dem", {
+          type: "raster-dem",
+          tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          maxzoom: 15,
+          encoding: "terrarium",
+        });
       }
 
       function toggleTerrain() {
         terrainEnabled = !terrainEnabled;
         document.getElementById("terrainBtn").classList.toggle("active", terrainEnabled);
         if (terrainEnabled) {
-          applyTerrain();
+          addTerrainSource();
+          map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 });
           map.easeTo({ pitch: 60, duration: 800 });
         } else {
-          removeTerrain();
+          map.setTerrain(null);
           map.easeTo({ pitch: 0, duration: 800 });
         }
+      }
+
+      // ── Style Switching ──
+      function switchStyle(key) {
+        if (key === currentStyleKey) return;
+        currentStyleKey = key;
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        const pitch = map.getPitch();
+        const bearing = map.getBearing();
+
+        // setStyle wipes ALL sources and layers — must re-add everything
+        map.setStyle(STYLES[key].style);
+        map.once("style.load", () => {
+          map.jumpTo({ center, zoom, pitch, bearing });
+          addOverlays();
+        });
+
+        document.querySelectorAll(".style-btn").forEach(b =>
+          b.classList.toggle("active", b.dataset.style === key));
       }
 
       // ── Build UI ──
@@ -261,7 +254,6 @@
         btn.addEventListener("click", () => switchStyle(key));
         switcher.appendChild(btn);
       });
-
       document.getElementById("terrainBtn").addEventListener("click", toggleTerrain);
 
       // ── Init Map ──
@@ -282,7 +274,7 @@
         map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: "imperial" }), "bottom-left");
         map.addControl(new maplibregl.FullscreenControl(), "top-right");
 
-        addTrailLayers();
+        addOverlays();
 
         map.on("click", "trails-layer", function (e) {
           const p = e.features[0].properties;

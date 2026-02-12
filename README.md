@@ -1,114 +1,77 @@
-# 🗺️ OSM Intelligence
+# OSM Intelligence
 
-This project provides an end-to-end framework for extracting trail and geographic features from **OpenStreetMap**, serving them as **vector tiles** via **Tegola**, and enabling **semantic search** and **AI-assisted trail discovery**.
+Interactive trail map for Montana built with OpenStreetMap data, served as static vector tiles.
 
-## 📦 What’s Included
+**🗺️ Live:** [macgreene14.github.io/osm-intelligence](https://macgreene14.github.io/osm-intelligence/)
 
-- ✅ **Task automation** to:
-  - Download `.osm.pbf` files
-  - Ingest OSM data into PostgreSQL/PostGIS
-- ✅ **Dockerized infrastructure** for:
-  - PostgreSQL with PostGIS and `pgvector` for semantic search
-  - Tegola vector tile server for high-performance map serving
-- ✅ **Data enrichment** with text embeddings to support semantic trail search
-- 🧠 **(Coming soon)**: LLM integration (e.g., Vanna.ai) to interpret user queries like:
-  - _“Show me an intermediate mountain biking trail with a scenic overlook”_
-  - _“I want a short forest walk near the river”_
-- 🗺️ A **Mapbox GL / MapLibre frontend** will display results interactively.
+![MapLibre](https://img.shields.io/badge/MapLibre_GL-4.1-blue) ![PMTiles](https://img.shields.io/badge/PMTiles-3.0-green) ![License](https://img.shields.io/badge/license-MIT-gray)
 
----
+## Features
 
-## 🚀 Quickstart
+- **Static vector tiles** — PMTiles served from GitHub, no tile server needed
+- **Color-coded trails** — path, track, cycleway, footway, bridleway
+- **4 base maps** — Dark, Topo, Satellite (Esri), Light
+- **3D terrain** — AWS elevation tiles with 1.5x exaggeration
+- **Click popups** — trail name, type, surface
+- **Labels** — along-line trail names at zoom 12+
+- **Zero API keys** — all tile sources are free and open
 
-### 1. Clone the Repository
+## Data Pipeline
 
-```bash
-git clone https://github.com/your-user/osm-trail-intelligence.git
-cd osm-intelligence
+```
+Montana PBF (92MB)
+  → osmium tags-filter (18MB) — trails & recreation features only
+  → osmium export → GeoJSON (94MB)
+  → tippecanoe → PMTiles (61MB) — zoom 5–14, drop-densest-as-needed
+  → GitHub Release → served via HTTP range requests
 ```
 
-### 2. Download OSM `.pbf` Region File
+### Filtered OSM Tags
 
-Use the Taskfile to download a region from Geofabrik:
+- **highway:** path, track, bridleway, cycleway, footway
+- **route:** hiking, foot, bicycle, mtb, ski
 
-```bash
-task download-osm
-```
+## Stack
 
-_(Default: `montana-latest.osm.pbf` — can be customized in `Taskfile.yml`)_
+- [MapLibre GL JS](https://maplibre.org/) — map rendering
+- [PMTiles](https://protomaps.com/docs/pmtiles) — static vector tile format
+- [tippecanoe](https://github.com/felt/tippecanoe) — tile generation
+- [osmium](https://osmcode.org/osmium-tool/) — PBF filtering & export
+- [CARTO](https://carto.com/basemaps/) / [OpenTopoMap](https://opentopomap.org/) / [Esri](https://www.esri.com/) — base map tiles
+- [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) — elevation DEM
 
-### 3. Run the Stack
-
-```bash
-docker compose up -d
-```
-
-This starts:
-
-- `postgres` with PostGIS + pgvector
-- `tegola` vector tile server
-
-### 4. Import and ETL OSM Data
+## Local Development
 
 ```bash
-task import-osm
+# Serve locally (any static server)
+python3 -m http.server 8000
+# open http://localhost:8000
 ```
 
-This runs `osm2pgsql` to load the `.pbf` file into PostGIS and transforms trails and path data.
+For local development, the PMTiles file needs to be in the root directory. Download from [Releases](https://github.com/macgreene14/osm-intelligence/releases).
 
----
+## Regenerating Tiles
 
-## 🧬 Semantic Search: Vector Field Augmentation
+```bash
+# Install tools
+brew install tippecanoe osmium-tool
 
-Once the raw OSM data is loaded:
+# Filter PBF for trails
+osmium tags-filter data/montana-latest.osm.pbf \
+  w/highway=path,track,bridleway,cycleway,footway \
+  r/route=hiking,foot,bicycle,mtb,ski \
+  -o data/montana-trails.osm.pbf
 
-1. **Trail metadata** is enriched using a combination of OSM tags (e.g., `highway=path`, `surface=dirt`, `sac_scale=mountain_hiking`) to form human-readable descriptions like:
+# Export to GeoJSON
+osmium export data/montana-trails.osm.pbf -o data/montana-trails.geojson
 
-   > _“Steep dirt trail, moderate length, scenic mountain views, foot access only”_
+# Generate PMTiles
+tippecanoe -o data/montana-trails.pmtiles --force \
+  --name="Montana Trails" --layer=trails \
+  -z14 -Z5 --drop-densest-as-needed \
+  data/montana-trails.geojson
+```
 
-2. Each description is passed through an **embedding model** (e.g., OpenAI `text-embedding-ada-002` or open-source equivalent) to generate a **vector representation** of its semantic meaning.
+## Deployment
 
-3. This embedding is stored in a `vector(768)` column using the [`pgvector`](https://github.com/pgvector/pgvector) extension.
-
-4. **Similarity search** is now possible:
-
-   ```sql
-   SELECT * FROM trails
-   ORDER BY embedding <-> '[user_embedding]'
-   LIMIT 10;
-   ```
-
----
-
-## 🧠 Future Direction: AI Trail Discovery
-
-We plan to integrate a **natural language interface** using [Vanna.ai](https://vanna.ai/) or similar LLMs. This will allow users to:
-
-- Search trails by typing freeform prompts
-- Ask for specific terrain, elevation, duration, or skill level
-- Discover places to visit based on vague or subjective criteria
-- Get results highlighted live in Mapbox/MapLibre
-
----
-
-## 🧱 Dependencies
-
-- [taskfile] (https://taskfile.dev/installation/)
-- [osm2pgsql](https://osm2pgsql.org/)
-- [Tegola](https://tegola.io/)
-- [PostGIS](https://postgis.net/)
-- [pgvector](https://github.com/pgvector/pgvector)
-- [Mapbox GL JS](https://docs.mapbox.com/mapbox-gl-js/) or [MapLibre](https://maplibre.org/)
-- [OpenAI](https://platform.openai.com/) or local embedding model
-
----
-
-## 📜 License
-
-MIT — see `LICENSE`.
-
----
-
-## 💡 Credits
-
-Inspired by the power of open data, open tools, and curiosity-driven exploration of the outdoors.
+GitHub Actions downloads the PMTiles from the release, bundles it with `index.html`, and deploys to GitHub Pages. No build step, no dependencies.
