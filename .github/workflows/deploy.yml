@@ -25,7 +25,8 @@ jobs:
 
       - name: Download PMTiles from release
         run: |
-          gh release download latest --pattern "*.pmtiles" --dir .
+          LATEST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+          gh release download "$LATEST_TAG" --pattern "*.pmtiles" --dir .
         env:
           GH_TOKEN: ${{ github.token }}
 
