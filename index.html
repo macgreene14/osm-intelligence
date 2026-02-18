@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OSM Intelligence - Montana Trails</title>
+    <title>OSM Intelligence - PNW Trails</title>
     <script src="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.js"></script>
     <link href="https://unpkg.com/maplibre-gl@4.1.2/dist/maplibre-gl.css" rel="stylesheet" />
     <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
@@ -20,13 +20,24 @@
         font-size: 13px; color: #e2e8f0;
         border: 1px solid rgba(255,255,255,0.1);
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        max-width: 220px;
+        max-width: 240px;
       }
       .map-overlay h3 { margin: 0 0 4px; font-size: 15px; color: #fff; }
-      .map-overlay p { margin: 0; opacity: 0.7; font-size: 12px; }
-      .trail-type-legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
-      .legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.8; }
-      .legend-swatch { width: 16px; height: 3px; border-radius: 2px; }
+      .map-overlay p { margin: 0 0 8px; opacity: 0.7; font-size: 12px; }
+
+      .filter-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+      .filter-pill {
+        display: flex; align-items: center; gap: 4px;
+        padding: 3px 8px; border-radius: 12px; cursor: pointer;
+        font-size: 11px; font-weight: 500;
+        border: 1px solid rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.08);
+        transition: opacity 0.2s, background 0.2s;
+        user-select: none;
+      }
+      .filter-pill.active { background: rgba(255,255,255,0.18); }
+      .filter-pill.inactive { opacity: 0.35; }
+      .filter-pill .swatch { width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0; }
 
       .bottom-bar {
         position: absolute; bottom: 24px; left: 10px; right: 10px; z-index: 1;
@@ -71,7 +82,7 @@
       .maplibregl-popup-close-button { color: #94a3b8 !important; font-size: 18px !important; }
 
       @media (max-width: 480px) {
-        .map-overlay { max-width: 180px; padding: 8px 12px; font-size: 12px; }
+        .map-overlay { max-width: 200px; padding: 8px 12px; font-size: 12px; }
         .map-overlay h3 { font-size: 13px; }
         .style-btn { width: 48px; height: 48px; }
         .bottom-bar { bottom: 16px; left: 8px; right: 8px; }
@@ -82,15 +93,9 @@
     <div id="map"></div>
 
     <div class="map-overlay">
-      <h3>🏔️ Montana Trails</h3>
-      <p>OSM recreational trails · PMTiles</p>
-      <div class="trail-type-legend">
-        <div class="legend-item"><div class="legend-swatch" style="background:#22d3ee"></div>path</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#a78bfa"></div>track</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#f472b6"></div>cycleway</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#34d399"></div>footway</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#fbbf24"></div>bridleway</div>
-      </div>
+      <h3>🏔️ PNW Trails</h3>
+      <p>MT · ID · WA · OR — OSM + PMTiles</p>
+      <div class="filter-pills" id="filterPills"></div>
     </div>
 
     <div class="bottom-bar">
@@ -104,10 +109,23 @@
       maplibregl.addProtocol("pmtiles", protocol.tile);
 
       const base = window.location.href.replace(/\/[^/]*(\?.*)?$/, "/");
-      const PMTILES_URL = base + "montana-trails.pmtiles";
+      const PMTILES_URL = base + "pnw-trails.pmtiles";
       const ATTR_CARTO = '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/">CARTO</a>';
 
-      // ── Styles: only base tile URLs + trail color overrides ──
+      // ── Trail type config ──
+      const TRAIL_TYPES = [
+        { key: "path",      label: "Path",      color: "#22d3ee" },
+        { key: "track",     label: "Track",     color: "#a78bfa" },
+        { key: "cycleway",  label: "Cycleway",  color: "#f472b6" },
+        { key: "footway",   label: "Footway",   color: "#34d399" },
+        { key: "bridleway", label: "Bridleway", color: "#fbbf24" },
+        { key: "steps",     label: "Steps",     color: "#fb923c" },
+      ];
+
+      // Filter state: all on by default
+      const activeFilters = new Set(TRAIL_TYPES.map(t => t.key));
+
+      // ── Styles ──
       const STYLES = {
         dark: {
           name: "Dark",
@@ -122,7 +140,7 @@
           tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
           tileSize: 256, maxzoom: 17,
           attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a>',
-          trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", default: "#1d4ed8" },
+          trailColors: { path: "#0e7490", track: "#6d28d9", cycleway: "#be185d", footway: "#047857", bridleway: "#b45309", steps: "#c2410c", default: "#1d4ed8" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
         satellite: {
@@ -131,7 +149,7 @@
           tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
           tileSize: 256, maxzoom: 19,
           attribution: '© <a href="https://www.esri.com">Esri</a>',
-          trailColors: { path: "#67e8f9", track: "#c4b5fd", cycleway: "#f9a8d4", footway: "#6ee7b7", bridleway: "#fcd34d", default: "#93c5fd" },
+          trailColors: { path: "#67e8f9", track: "#c4b5fd", cycleway: "#f9a8d4", footway: "#6ee7b7", bridleway: "#fcd34d", steps: "#fdba74", default: "#93c5fd" },
           labelColors: { text: "#ffffff", halo: "rgba(0,0,0,0.8)" },
         },
         light: {
@@ -140,7 +158,7 @@
           tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
           tileSize: 256, maxzoom: 20,
           attribution: ATTR_CARTO,
-          trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", default: "#2563eb" },
+          trailColors: { path: "#0891b2", track: "#7c3aed", cycleway: "#db2777", footway: "#059669", bridleway: "#d97706", steps: "#ea580c", default: "#2563eb" },
           labelColors: { text: "#1e293b", halo: "rgba(255,255,255,0.9)" },
         },
       };
@@ -151,37 +169,64 @@
       // ── Trail color helpers ──
       function getTypeColors(key) {
         const c = STYLES[key]?.trailColors;
-        if (!c) return ["match",["get","highway"],"path","#22d3ee","track","#a78bfa","cycleway","#f472b6","footway","#34d399","bridleway","#fbbf24","#60a5fa"];
-        return ["match",["get","highway"],"path",c.path,"track",c.track,"cycleway",c.cycleway,"footway",c.footway,"bridleway",c.bridleway,c.default];
+        const colors = c || { path: "#22d3ee", track: "#a78bfa", cycleway: "#f472b6", footway: "#34d399", bridleway: "#fbbf24", steps: "#fb923c", default: "#60a5fa" };
+        return ["match", ["get", "highway"],
+          "path", colors.path, "track", colors.track, "cycleway", colors.cycleway,
+          "footway", colors.footway, "bridleway", colors.bridleway, "steps", colors.steps || colors.default,
+          colors.default || "#60a5fa"];
       }
       function getLabelColors(key) {
         return STYLES[key]?.labelColors || { text: "#e2e8f0", halo: "rgba(15,23,42,0.9)" };
       }
 
-      // ── Build initial style with ALL sources baked in ──
+      // ── Build filter expression ──
+      function buildFilterExpr() {
+        if (activeFilters.size === TRAIL_TYPES.length) return null; // no filter needed
+        if (activeFilters.size === 0) return ["==", "highway", "__none__"]; // hide all
+        return ["in", "highway", ...activeFilters];
+      }
+
+      function applyFilters() {
+        const filter = buildFilterExpr();
+        map.setFilter("trails-layer", filter);
+        map.setFilter("trails-labels", filter ? ["all", filter, ["has", "name"]] : ["has", "name"]);
+      }
+
+      // ── Build filter pill UI ──
+      const pillContainer = document.getElementById("filterPills");
+      TRAIL_TYPES.forEach(t => {
+        const pill = document.createElement("div");
+        pill.className = "filter-pill active";
+        pill.dataset.type = t.key;
+        pill.innerHTML = `<div class="swatch" style="background:${t.color}"></div>${t.label}`;
+        pill.addEventListener("click", () => {
+          if (activeFilters.has(t.key)) {
+            activeFilters.delete(t.key);
+            pill.classList.remove("active");
+            pill.classList.add("inactive");
+          } else {
+            activeFilters.add(t.key);
+            pill.classList.remove("inactive");
+            pill.classList.add("active");
+          }
+          applyFilters();
+        });
+        pillContainer.appendChild(pill);
+      });
+
+      // ── Build full style ──
       function buildFullStyle(key) {
         const s = STYLES[key];
         return {
           version: 8,
           glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
           sources: {
-            base: {
-              type: "raster",
-              tiles: s.tiles,
-              tileSize: s.tileSize,
-              maxzoom: s.maxzoom,
-              attribution: s.attribution,
-            },
-            trails: {
-              type: "vector",
-              url: "pmtiles://" + PMTILES_URL,
-            },
+            base: { type: "raster", tiles: s.tiles, tileSize: s.tileSize, maxzoom: s.maxzoom, attribution: s.attribution },
+            trails: { type: "vector", url: "pmtiles://" + PMTILES_URL },
             "terrain-dem": {
               type: "raster-dem",
               tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
-              tileSize: 256,
-              maxzoom: 15,
-              encoding: "terrarium",
+              tileSize: 256, maxzoom: 15, encoding: "terrarium",
             },
           },
           terrain: terrainEnabled ? { source: "terrain-dem", exaggeration: 1.5 } : undefined,
@@ -192,17 +237,18 @@
               layout: { "line-join": "round", "line-cap": "round" },
               paint: {
                 "line-color": getTypeColors(key),
-                "line-width": ["interpolate",["linear"],["zoom"],7,0.5,12,1.5,17,3],
-                "line-opacity": ["interpolate",["linear"],["zoom"],7,0.4,12,0.85],
+                "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.3, 8, 0.6, 12, 1.5, 17, 3],
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.25, 8, 0.5, 12, 0.85],
               },
             },
             {
               id: "trails-labels", type: "symbol", source: "trails", "source-layer": "trails",
               minzoom: 12,
+              filter: ["has", "name"],
               layout: {
-                "text-field": ["get","name"],
+                "text-field": ["get", "name"],
                 "text-font": ["Open Sans Bold"],
-                "text-size": ["interpolate",["linear"],["zoom"],12,10,17,14],
+                "text-size": ["interpolate", ["linear"], ["zoom"], 12, 10, 17, 14],
                 "symbol-placement": "line",
                 "text-allow-overlap": false,
               },
@@ -216,40 +262,21 @@
         };
       }
 
-      // ── Hot-swap: only replace base tiles + update trail colors (no setStyle!) ──
+      // ── Hot-swap style ──
       function switchStyle(key) {
         if (key === currentStyleKey) return;
         currentStyleKey = key;
         const s = STYLES[key];
-
-        // Swap base raster source tiles — this is instant, tiles are fetched in background
-        const baseSource = map.getSource("base");
-        if (baseSource) {
-          // MapLibre raster source doesn't have setTiles, so we update via style mutation
-          // Remove and re-add just the base source + layer
-          map.removeLayer("base");
-          map.removeSource("base");
-          map.addSource("base", {
-            type: "raster",
-            tiles: s.tiles,
-            tileSize: s.tileSize,
-            maxzoom: s.maxzoom,
-            attribution: s.attribution,
-          });
-          // Re-add base layer BELOW trails
-          map.addLayer({ id: "base", type: "raster", source: "base" }, "trails-layer");
-        }
-
-        // Update trail colors for this basemap
+        map.removeLayer("base");
+        map.removeSource("base");
+        map.addSource("base", { type: "raster", tiles: s.tiles, tileSize: s.tileSize, maxzoom: s.maxzoom, attribution: s.attribution });
+        map.addLayer({ id: "base", type: "raster", source: "base" }, "trails-layer");
         const tc = getTypeColors(key);
         const lc = getLabelColors(key);
         map.setPaintProperty("trails-layer", "line-color", tc);
         map.setPaintProperty("trails-labels", "text-color", lc.text);
         map.setPaintProperty("trails-labels", "text-halo-color", lc.halo);
-
-        // Update active button
-        document.querySelectorAll(".style-btn").forEach(b =>
-          b.classList.toggle("active", b.dataset.style === key));
+        document.querySelectorAll(".style-btn").forEach(b => b.classList.toggle("active", b.dataset.style === key));
       }
 
       // ── Terrain toggle ──
@@ -278,12 +305,13 @@
       });
       document.getElementById("terrainBtn").addEventListener("click", toggleTerrain);
 
-      // ── Init map with full style (all sources pre-loaded) ──
+      // ── Init map — centered on PNW region ──
       const map = new maplibregl.Map({
         container: "map",
         style: buildFullStyle("dark"),
-        center: [-110.5, 46.8],
-        zoom: 7,
+        center: [-117.5, 45.5],
+        zoom: 5,
+        minZoom: 3,
         maxPitch: 85,
       });
 
@@ -307,6 +335,8 @@
                 ${p.highway ? `<div>Type: ${p.highway}</div>` : ""}
                 ${p.surface ? `<div>Surface: ${p.surface}</div>` : ""}
                 ${p.route ? `<div>Route: ${p.route}</div>` : ""}
+                ${p.sac_scale ? `<div>Difficulty: ${p.sac_scale.replace(/_/g, ' ')}</div>` : ""}
+                ${p.mtb_scale ? `<div>MTB: ${p.mtb_scale}</div>` : ""}
               </div>`
             )
             .addTo(map);
